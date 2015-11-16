@@ -1,0 +1,352 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"> 
+<html>
+<head>
+<link href="css/bootstrap.css" rel="stylesheet" type="text/css">
+<link href="css/bootstrap.min.css" rel="stylesheet" type="text/css">
+<link href="css/bootstrap-theme.css" rel="stylesheet" type="text/css">
+<link href="css/bootstrap-theme.css" rel="stylesheet" type="text/css">
+<script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script> 
+<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+<script src="http://code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+
+<title>Visual Encoding Experiment</title>
+</head>
+<style>
+	.axis path,
+	.axis line{
+			fill: none;
+			stroke: black;
+			shape-rendering: crispEdges;
+		}
+		
+	.axis text{
+			font-family: sans-serif;
+			font-size: 11px;
+		}
+</style>
+
+<body>
+	
+	<div class="col-md-8 col-md-offset-2">
+		<div><h3 >D3 Experiment</h3></div>
+		<HR style="FILTER: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color=#987cb9 SIZE=3>
+		<p id="textInstruction">Welcome to the Experiment, this experiment is designed to explore whether colors make a differences to human's perception of numerical differences in a barchart. There will 3 types of barchart in your experiment, each type will show up 9 times. Have fun!</p>
+    </div>
+	
+	<div class="col-md-8 col-md-offset-2" id="container">
+	<div class="col-md-5 col-md-offset-0" id="containerGram">
+    </div>
+	<div class="col-md-5 col-md-offset-1" id="containerText">
+		<h3>Question</h3>
+		<p id="instruction"></p>
+		<HR style="FILTER: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color=#987cb9 SIZE=3>
+		<form id="answer" action="http://api.duoshuo.com/posts/create.json" method="post">
+			<p>Percentage: <input id="report" type="text"/></p>
+			<button type="button" class="btn btn-primary" onclick="submitToNext()">Submit</button>
+		</form>
+	</div>
+	</div>
+
+</body>
+
+<script>
+	
+	var trials=27;
+	
+	var maxDistanceType=3;
+	var maxPercentageType=3;
+	
+	var latinSquare=[[1,0,2],[0,2,1],[2,1,0]];
+	
+	var dataLength=10;
+	var dataMax=100;
+	
+	var color=[]
+	var exCount=2;
+	
+	var thisType=0;
+	var thisPerType=0;
+	var thisDistType=0;
+	
+	var userIdString=uuid();
+	
+	function uuid() {
+		var s = [];
+		var hexDigits = "0123456789abcdef";
+		for (var i = 0; i < 36; i++) {
+			s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1);
+		}
+		s[14] = "4";  // bits 12-15 of the time_hi_and_version field to 0010
+		s[19] = hexDigits.substr((s[19] & 0x3) | 0x8, 1);  // bits 6-7 of the clock_seq_hi_and_reserved to 01
+		s[8] = s[13] = s[18] = s[23] = "-";
+ 
+		var uuid = s.join("");
+		return uuid;
+	}
+	
+	var request = new XMLHttpRequest();  
+	
+	var colorList = ["#FFFF99","#B5FF91","#94DBFF","#FFBAFF","#FFBD9D","#C7A3ED","#CC9898","#8AC007","#CCC007","#FFAD5C"];
+	
+	var truth=0;
+	
+	
+	function randomColor(colorList){
+		var colorIndex = Math.floor(Math.random()*colorList.length);
+		var color = colorList[colorIndex];
+		colorList.splice(colorIndex,1);
+		return color;
+	}
+	
+	function submitToNext(){
+		var postbody={"author_name":"gwu","author_email":"fineguojun@gmail","short_name":"experiments","thread_key":"experiment","secret":"EHddSDmUFXXT7fyiIT89J5G1VjW0I59N"};
+		var messageString=$("#report").val();
+		var wholeMsg={"uuid":userIdString,"reportPercent":messageString,"truth":truth,"type":thisType,"perType":thisPerType,"distType":thisDistType};
+		postbody["message"]=JSON.stringify(wholeMsg);
+		
+		$.ajax({
+			url:"http://duoshuo.com/api/posts/create.json",
+			dataType:"json",
+			async:true,
+			data:postbody,
+			type:"POST",
+			success:function (req){
+				if (exCount<=27){
+					draw();
+					exCount+=1;
+				}
+				if (exCount>27){
+					location="finish.html";
+				}
+			},
+			error:function(req){
+				alert("sss");
+			}
+		})
+	}
+	
+	function randomDataset(distanceType,percentageType){
+		var dt=distanceType;
+		var pt=percentageType;
+		var largeOne=Math.random() * dataMax * (1.0/maxDistanceType) + (1.0/maxDistanceType) * dt * dataMax ;
+		var smallOne=(Math.random() * (1.0/maxPercentageType) + pt*(1.0/maxPercentageType)) * largeOne;
+		truth=Math.floor(smallOne/largeOne*100);
+		
+		var dataSet=[];
+		for (var i=0;i<dataLength;i++)
+			dataSet.push(Math.random() * dataMax);
+			
+		var largeOnePosition=Math.floor(Math.random()*dataLength);
+		var smallOnePosition=largeOnePosition;
+		while (smallOnePosition==largeOnePosition){
+			smallOnePosition=Math.floor(Math.random()*dataLength);
+		}
+		dataSet[smallOnePosition]=smallOne;
+		dataSet[largeOnePosition]=largeOne;
+		return {"data":dataSet,"large":largeOnePosition,"small":smallOnePosition}
+		
+	}
+	
+	var types=[[3,3,3],[3,3,3],[3,3,3]];
+	
+	var width=350;
+	var height=350;
+	var padding = {left:10, right:10, top:10, bottom:30};
+			
+			
+	var svg=d3.select("#containerGram")
+			.append("svg")
+			.attr("id","container")
+			.attr("width",width)
+			.attr("height",height);
+	svg.append("g")
+		.attr("id","canvas");
+	
+	
+	
+	var xAxisScale=d3.scale.ordinal()
+				.domain(d3.range(dataLength))
+				.rangeRoundBands([0,width-padding.left - padding.right],0.2);
+				
+			
+	var xScale=d3.scale.ordinal()
+				.domain(d3.range(dataLength))
+				.rangeRoundBands([0,width-padding.left - padding.right],0.2);
+	var yScale=d3.scale.linear()
+				.domain([0,dataMax])
+				.range([0,height-padding.top - padding.bottom]);
+	var xAxis=d3.svg.axis()
+				.scale(xAxisScale)
+				.orient("bottom");
+	draw();
+	function draw(){
+		var canvas=d3.select("#canvas")
+					.remove();
+		canvas=svg.append("g")
+					.attr("id","canvas");
+		var distType=Math.floor(Math.random()*3);
+		var perType=Math.floor(Math.random()*3);
+		while (types[distType][perType]==0){
+			distType=Math.floor(Math.random()*3);
+			perType=Math.floor(Math.random()*3);
+		}
+		types[distType][perType]=types[distType][perType]-1;
+		thisDistType=distType;
+		thisPerType=perType;
+		thisType=latinSquare[distType][perType];
+		
+		data=randomDataset(distType,perType);
+		if (latinSquare[distType][perType]==0)
+			drawNaiveBar(data);
+			else if (latinSquare[distType][perType]==1)
+				drawBlackBar(data);
+				else if (latinSquare[distType][perType]==2)
+					drawColorBar(data);
+		
+		
+	}
+	
+	function drawNaiveBar(data){
+		var g=d3.select("#canvas");
+		
+		var dataSet=data.data;
+		var smallPosition=data.small;
+		var largePosition=data.large;
+		
+		document.getElementById("instruction")
+			.innerHTML="What percentage is the smaller rectangle of the larger rectangle in the bar chart?(Those two which are marked with dot)";
+			
+		g.selectAll("rect")
+			.data(dataSet)
+			.enter()
+			.append("rect")
+			.attr("x",function(d,i){
+				return xScale(i);
+			})
+			.attr("y",function(d,i){
+				return height-padding.top - padding.bottom-yScale(d);
+			})
+			.attr("width",function(d,i){
+				return xScale.rangeBand();
+			})
+			.attr("height",yScale)
+			.attr("stroke","black")
+			.attr("shape-rendering","crispEdges")
+			.attr("transform", "translate(" + padding.left + "," + padding.top + ")")
+			.attr("fill","white");
+		g.append("g")
+			.attr("class","axis")
+			.attr("transform", "translate(" + padding.left + "," + (height-padding.bottom) + ")")
+			.call(xAxis);
+		
+		
+		g.append("circle")
+			.attr("cx", xAxisScale(smallPosition)+xScale.rangeBand()-2)
+			.attr("cy",height-padding.bottom-5)
+			.attr("r",3);
+		
+		g.append("circle")
+			.attr("cx", xAxisScale(largePosition)+xScale.rangeBand()-2)
+			.attr("cy",height-padding.bottom-5)
+			.attr("r",3);
+	
+	}
+	
+	function drawBlackBar(data){
+		var g=d3.select("#canvas");
+		
+		var dataSet=data.data;
+		var smallPosition=data.small;
+		var largePosition=data.large;
+		
+		document.getElementById("instruction")
+			.innerHTML="What percentage is the smaller rectangle of the larger rectangle in the bar chart?(Those two which are filled with black)";
+		
+		g.selectAll("rect")
+			.data(dataSet)
+			.enter()
+			.append("rect")
+			.attr("id",function(d,i){
+				return "rect"+i;
+			})
+			.attr("x",function(d,i){
+				return xScale(i);
+			})
+			.attr("y",function(d,i){
+				return height-padding.top - padding.bottom-yScale(d);
+			})
+			.attr("width",function(d,i){
+				return xScale.rangeBand();
+			})
+			.attr("height",yScale)
+			.attr("stroke","black")
+			.attr("shape-rendering","crispEdges")
+			.attr("transform", "translate(" + padding.left + "," + padding.top + ")")
+			.attr("fill","white");
+		g.append("g")
+			.attr("class","axis")
+			.attr("transform", "translate(" + padding.left + "," + (height-padding.bottom) + ")")
+			.call(xAxis);
+		
+		g.select("#rect"+smallPosition)
+			.attr("fill","black");
+		g.select("#rect"+largePosition)
+			.attr("fill","black")
+	}
+	
+	function drawColorBar(data){
+		var shuffleColor=[];
+		for (var i=0;i<10;i++)
+			shuffleColor.push(colorList[i]);
+		var g=d3.select("#canvas");
+		
+		var dataSet=data.data;
+		var smallPosition=data.small;
+		var largePosition=data.large;
+		
+		document.getElementById("instruction")
+			.innerHTML="What percentage is the smaller rectangle of the larger rectangle in the bar chart?(Those two which are marked with dot)";
+		
+		g.selectAll("rect")
+			.data(dataSet)
+			.enter()
+			.append("rect")
+			.attr("id",function(d,i){
+				return "rect"+i;
+			})
+			.attr("x",function(d,i){
+				return xScale(i);
+			})
+			.attr("y",function(d,i){
+				return height-padding.top - padding.bottom-yScale(d);
+			})
+			.attr("width",function(d,i){
+				return xScale.rangeBand();
+			})
+			.attr("height",yScale)
+			.attr("shape-rendering","crispEdges")
+			.attr("transform", "translate(" + padding.left + "," + padding.top + ")")
+			.attr("fill",function (){
+				return randomColor(shuffleColor);
+			});
+		g.append("g")
+			.attr("class","axis")
+			.attr("transform", "translate(" + padding.left + "," + (height-padding.bottom) + ")")
+			.call(xAxis);
+		g.append("circle")
+			.attr("cx", xAxisScale(smallPosition)+xScale.rangeBand()-2)
+			.attr("cy",height-padding.bottom-5)
+			.attr("r",3);
+		
+		g.append("circle")
+			.attr("cx", xAxisScale(largePosition)+xScale.rangeBand()-2)
+			.attr("cy",height-padding.bottom-5)
+			.attr("r",3);
+		
+	}
+	
+
+	
+	
+</script>
+</html>
